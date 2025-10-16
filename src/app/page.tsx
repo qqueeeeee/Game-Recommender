@@ -5,7 +5,6 @@ interface SteamGame {
   appid: number;
   name?: string;
   playtime_forever?: number;
-  // Optionally, add more fields
 }
 
 function extractSteamId(input: string): string | null {

@@ -13,18 +13,17 @@ GENRE_COL = "genres"
 TAG_COL = "categories" 
 NAME_COL = "name"
 APPID_COL = "appid"
-REVIEW_COL = "positive_ratings"   # Use if available, else comment out
+REVIEW_COL = "positive_ratings"  
 POPULARITY_COL = "owners"
 
 for col in [GENRE_COL, TAG_COL]:
     df_games[col] = df_games[col].fillna("").str.lower()
 
-# --- parse owners like "20,000 - 50,000" to int (use lower bound) ---
 def parse_owners(raw):
     if pd.isna(raw): return 0
     if isinstance(raw, (int, float)):
         return int(raw)
-    # Range like "20,000 - 50,000"
+
     if isinstance(raw, str):
         try:
             val = raw.split('-')[0].strip().replace(',', '')
@@ -82,7 +81,6 @@ def recommend(request: RecRequest):
         .head(10)
     )
 
-    # Return as numbers for filtering in frontend
     result = top_games[[APPID_COL, NAME_COL, GENRE_COL, "score", "owners_num"]].rename(
         columns={"owners_num": "owners"}).to_dict(orient="records")
     return {"recommendations": result}
