@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import pandas as pd
@@ -6,6 +7,14 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 df_games = pd.read_csv("steam.csv")
 
@@ -23,7 +32,6 @@ def parse_owners(raw):
     if pd.isna(raw): return 0
     if isinstance(raw, (int, float)):
         return int(raw)
-
     if isinstance(raw, str):
         try:
             val = raw.split('-')[0].strip().replace(',', '')
@@ -74,7 +82,6 @@ def recommend(request: RecRequest):
     sims = cosine_similarity(X[0:1], X[1:]).flatten()
     candidate_games["score"] = sims
 
-    # *** Only sort ONCE by similarity+owners_num as tiebreaker ***
     top_games = (
         candidate_games
         .sort_values(["score", "owners_num"], ascending=[False, False])
