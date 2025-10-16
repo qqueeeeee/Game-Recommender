@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   const json = await req.json();
-  const pyApiUrl = "http://localhost:8000/recommend";
+  const pyApiUrl = "game-recommender-api-production-71d1.up.railway.app";
   const response = await fetch(pyApiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
