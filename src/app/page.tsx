@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface SteamGame {
   appid: number;
@@ -32,13 +32,29 @@ async function fetchRecommendations(userGames: SteamGame[]) {
   return data.recommendations || [];
 }
 
+async function fetchGamePrice(appid: number): Promise<number | null> {
+  try {
+    // Use full backend URL if running frontend locally and backend remotely
+    const res = await fetch(`https://game-recommender-api-production-71d1.up.railway.app/price?appid=${appid}&cc=US`);
+    const data = await res.json();
+    console.log("Price API response:", appid, data);
+    return typeof data.price === "number" ? data.price : null;
+  } catch (err) {
+    console.error("Price fetch error:", err);
+    return null;
+  }
+}
+
 export default function Home() {
   const [steamId, setSteamId] = useState("");
   const [inputError, setInputError] = useState("");
   const [loading, setLoading] = useState(false);
   const [games, setGames] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [sortMode, setSortMode] = useState<"similarity" | "owners">("similarity");
+  const [steamUsername, setSteamUsername] = useState("");
+  const [steamAvatar, setSteamAvatar] = useState("");
+  const [sortMode, setSortMode] = useState<"similarity" | "owners" | "price">("similarity");
+  const [gamePrices, setGamePrices] = useState<Record<number, number | null>>({});
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSteamId(e.target.value);
@@ -51,6 +67,8 @@ export default function Home() {
     setLoading(true);
     setGames([]);
     setRecommendations([]);
+    setSteamUsername("");
+    setSteamAvatar("");
     console.log("Submitted Steam ID / Profile:", steamId);
 
     const extracted = extractSteamId(steamId);
@@ -68,6 +86,15 @@ export default function Home() {
       if (!res.ok) throw new Error("API call failed");
       const data = await res.json();
 
+      // Set username and avatar from players array
+      if (data.response?.players && data.response.players.length > 0) {
+        setSteamUsername(data.response.players[0].personaname ?? "Unknown");
+        setSteamAvatar(data.response.players[0].avatarfull ?? "");
+      } else {
+        setSteamUsername("Unknown");
+        setSteamAvatar("");
+      }
+
       const userGames = data.response?.games ?? [];
       setGames(userGames);
 
@@ -77,16 +104,37 @@ export default function Home() {
       } else {
         const recs = await fetchRecommendations(userGames);
         setRecommendations(recs);
+        setGamePrices({}); // reset previous prices
         console.log("Model recommendations from backend:", recs);
       }
     } catch (err) {
       setInputError("Could not fetch data from Steam.");
       setGames([]);
       setRecommendations([]);
+      setSteamUsername("");
+      setSteamAvatar("");
     } finally {
       setLoading(false);
     }
   }
+
+  console.log("Current recommendations state:", recommendations);
+  useEffect(() => {
+    if (recommendations.length > 0) {
+      (async () => {
+        const pricesObj: Record<number, number | null> = {};
+        await Promise.all(
+          recommendations.map(async (game: any) => {
+            console.log("Running price fetch for recommendations", recommendations);
+            const price = await fetchGamePrice(game.appid);
+            console.log("Steam price API response for", game.appid, price);
+            pricesObj[game.appid] = price === null ? null : price;
+          })
+        );
+        setGamePrices(pricesObj);
+      })();
+    }
+  }, [recommendations]);
 
   return (
     <main className="flex justify-center min-h-screen bg-black p-4">
@@ -171,6 +219,12 @@ export default function Home() {
               >
                 Sort by Owners
               </button>
+              <button
+                onClick={() => setSortMode("price")}
+                className={`px-3 py-1 rounded ${sortMode === "price" ? "bg-blue-700 text-white" : "bg-neutral-800 text-gray-300"} font-semibold border border-blue-900/40`}
+              >
+                Sort by Price
+              </button>
             </div>
             <p className="text-base text-gray-300 mb-5">
               Recommended by our AI model (based on your most played games):
@@ -181,6 +235,8 @@ export default function Home() {
                   .sort((a, b) => {
                     if (sortMode === "owners") {
                       return (b.owners ?? 0) - (a.owners ?? 0);
+                    } else if (sortMode === "price") {
+                      return (gamePrices[a.appid] ?? Infinity) - (gamePrices[b.appid] ?? Infinity);
                     } else {
                       return (b.score ?? 0) - (a.score ?? 0);
                     }
@@ -216,6 +272,11 @@ export default function Home() {
                               Owners: {typeof game.owners === "number" ? game.owners.toLocaleString() : game.owners}
                             </span>
                           )}
+                          {gamePrices[game.appid] !== undefined && (
+                            <span className="ml-2 text-xs text-purple-400">
+                              Price: {gamePrices[game.appid] === null ? "N/A" : gamePrices[game.appid] === 0 ? "Free" : `$${gamePrices[game.appid]}`}
+                            </span>
+                          )}
                         </div>
                       </a>
                     </li>
@@ -226,7 +287,6 @@ export default function Home() {
                 No recommendations to show yet. Enter a Steam ID above!
               </div>
             )}
-
             {games.length > 0 && (
               <>
                 <h2 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">
